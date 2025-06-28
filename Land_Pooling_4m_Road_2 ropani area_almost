@@ -1,0 +1,91 @@
+import processing
+import math
+from qgis.core import QgsProject, QgsCoordinateReferenceSystem, QgsField
+from qgis.PyQt.QtCore import QVariant
+
+# --- STEP 1: Set CRS (UTM Zone 44N for Tanahun) ---
+project = QgsProject.instance()
+crs = QgsCoordinateReferenceSystem("EPSG:32644")
+project.setCrs(crs)
+
+# --- STEP 2: Dissolve Parcels by Ownership (Name field) ---
+boundary_layer = QgsProject.instance().mapLayersByName('Boundary50')[0]
+params = {
+    'INPUT': boundary_layer,
+    'FIELD': ['Name'],
+    'OUTPUT': 'memory:dissolved'
+}
+result = processing.run("native:dissolve", params)
+dissolved_layer = result['OUTPUT']
+dissolved_layer.setName('dissolved')
+QgsProject.instance().addMapLayer(dissolved_layer)
+
+# --- STEP 3: Calculate Area for Each Owner (in m2 and ropani) ---
+ropani_m2 = 508.72
+dissolved_layer.startEditing()
+if dissolved_layer.fields().indexFromName('area_m2') == -1:
+    dissolved_layer.dataProvider().addAttributes([
+        QgsField("area_m2", QVariant.Double),
+        QgsField("area_ropani", QVariant.Double)
+    ])
+    dissolved_layer.updateFields()
+area_m2_idx = dissolved_layer.fields().indexFromName('area_m2')
+area_ropani_idx = dissolved_layer.fields().indexFromName('area_ropani')
+for feat in dissolved_layer.getFeatures():
+    area = feat.geometry().area()
+    dissolved_layer.changeAttributeValue(feat.id(), area_m2_idx, round(area, 2))
+    dissolved_layer.changeAttributeValue(feat.id(), area_ropani_idx, round(area / ropani_m2, 3))
+dissolved_layer.commitChanges()
+
+# --- STEP 4: Create Grid of 2 Ropani 1 Aana Cells Covering the Entire Area ---
+cell_area = (2 * 16 + 1) / 16 * ropani_m2  # 2 ropani 1 aana
+cell_size = math.sqrt(cell_area)            # Square grid, side in meters
+extent = boundary_layer.extent()
+grid_params = {
+    'TYPE': 2,  # Polygon grid
+    'EXTENT': f"{extent.xMinimum()},{extent.xMaximum()},{extent.yMinimum()},{extent.yMaximum()}",
+    'HSPACING': cell_size,
+    'VSPACING': cell_size,
+    'CRS': boundary_layer.crs(),
+    'OUTPUT': 'memory:full_grid'
+}
+result = processing.run("qgis:creategrid", grid_params)
+grid_layer = result['OUTPUT']
+grid_layer.setName('full_grid')
+QgsProject.instance().addMapLayer(grid_layer)
+
+# --- STEP 5: Clip the Grid to the Study Boundary ---
+clip_params = {
+    'INPUT': grid_layer,
+    'OVERLAY': boundary_layer,
+    'OUTPUT': 'memory:clipped_grid'
+}
+result = processing.run("native:clip", clip_params)
+clipped_grid = result['OUTPUT']
+clipped_grid.setName('clipped_grid')
+QgsProject.instance().addMapLayer(clipped_grid)
+
+# --- STEP 6: Add Area Fields to the Clipped Grid (m2, ropani, aana) ---
+aana_m2 = 31.8  # 1 aana in m²
+clipped_grid.startEditing()
+fields = clipped_grid.fields()
+if fields.indexFromName('area_m2') == -1:
+    clipped_grid.dataProvider().addAttributes([
+        QgsField("area_m2", QVariant.Double),
+        QgsField("ropani", QVariant.Int),
+        QgsField("aana", QVariant.Double)
+    ])
+    clipped_grid.updateFields()
+area_idx = clipped_grid.fields().indexFromName('area_m2')
+ropani_idx = clipped_grid.fields().indexFromName('ropani')
+aana_idx = clipped_grid.fields().indexFromName('aana')
+for feat in clipped_grid.getFeatures():
+    area = feat.geometry().area()
+    n_ropani = int(area // ropani_m2)
+    n_aana = round((area - n_ropani * ropani_m2) / aana_m2, 2)
+    clipped_grid.changeAttributeValue(feat.id(), area_idx, round(area, 2))
+    clipped_grid.changeAttributeValue(feat.id(), ropani_idx, n_ropani)
+    clipped_grid.changeAttributeValue(feat.id(), aana_idx, n_aana)
+clipped_grid.commitChanges()
+
+print("Completed up to clipped grid with area fields. All grid cells are now visible in the canvas.")
