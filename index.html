@@ -497,7 +497,7 @@ const App = () => {
                                     <p className="text-gray-600">Click to view details (placeholder)</p>
                                     <div className="mt-4 text-blue-500">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 0 00-2 2v10a2 0 002 2h10a2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                         </svg>
                                         View Project
                                     </div>
@@ -577,11 +577,6 @@ const App = () => {
 
     return (
         <div className="min-h-screen bg-gray-100 font-sans text-gray-900 antialiased">
-            {/* Tailwind CSS CDN */}
-            <script src="https://cdn.tailwindcss.com"></script>
-            {/* Inter Font via Google Fonts */}
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-
             <style>
                 {`
                 body {
